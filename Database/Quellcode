@@ -3,3 +3,13 @@
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.feature_extraction.text import CountVectorizer
 import pandas as pd
+
+#Daten einlesen
+df1 = pd.read_csv("Datenblatt1")
+df2 = pd.read_csv("Datenblatt2")
+
+#Training und Test Daten separieren für Datensatz 1
+train = df1[df1['Date'] < '20150101']
+test = df1[df1['Date'] > '20141231']
+
+#Training und Test Daten separieren für Datensatz 2

@@ -30,3 +30,17 @@ data1.columns, data2.columns = new_index
 for i in new_index:
     data1[i] = data1[i].str.lower()
     data2[i] = data2[i].str.lower()
+
+# Daten in Zeile 1 in String konvertieren und zu einem String zusammenfassen
+headlines1 = []
+for row in range(0, len(data1.index)):
+    headlines1.append(' '.join(str(x) for x in data1.iloc[row, 0:25]))
+
+headlines2 = []
+for row in range(0, len(data2.index)):
+    headlines2.append(' '.join(str(x) for x in data2.iloc[row, 0:25]))
+
+# Implementierung von BAG of WORDS
+countvector = CountVectorizer(ngram_range = (2, 2))
+traindataset1 = countvector.fit_transform(headlines1)
+traindataset2 = countvector.fit_transform(headlines2)

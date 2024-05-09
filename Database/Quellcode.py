@@ -27,3 +27,8 @@ headlines1 = []
 for row in range(0, len(data1.index)):
     headlines1.append(' '.join(str(x) for x in data1.iloc[row, 0:25]))
 
+# Aufteilen in Features (Nachrichten) und Labels
+X = [item for item in headlines1]
+Y = [item for item in df1.iloc[:, 1]]
+
+

@@ -98,6 +98,10 @@ print("Vorhersagegenauigkeit:", accuracy)
 #Pre-trained NER model?
 #feed this representation (BERT embeddings or combined representation) as input to transformer encoder?
 
+#Streamlit:
+#(Relevante) Nachrichten anzeigen
+#Potential Top Mover als interaktives Element: Ergebnisse der Prognose und Anzeigen von Kursen
+
 import pandas as pd
 from tensorflow.keras.layers import TextVectorization, Embedding, Transformer, Dense
 from tensorflow.keras.models import Sequential

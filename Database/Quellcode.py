@@ -1,56 +1,3 @@
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.model_selection import train_test_split
-from sklearn.svm import SVC
-from sklearn.metrics import accuracy_score
-import pandas as pd
-
-#Daten einlesen
-df1 = pd.read_csv("C:/Users/Felix/OneDrive/10_FAU/Semester 6/Machine Learning for Business/Datenblatt1.csv", encoding="ISO-8859-1")
-
-# Alles außer a-z und A-Z entfernen
-data1 = df1.iloc[:, 2:27]
-data1.replace("[^a-zA-Z]", " ", regex=True, inplace=True)
-
-# Spaltennamen in Zahlen ändern
-list1 = [i for i in range(25)]
-new_index = [str(i) for i in list1]
-data1.columns = new_index
-
-# Großbuchstaben in Kleinbuchstaben
-for i in new_index:
-    data1[i] = data1[i].str.lower()
-
-# Daten in jeder Zeile in String konvertieren und zu einem String zusammenfassen
-# => Nachrichten pro Tag in einem String zusammengefasstheadlines = []
-headlines = []
-for row in range(0, len(data1.index)):
-    headlines.append(' '.join(str(x) for x in data1.iloc[row, 0:25]))
-
-# Aufteilen in Features (Nachrichten) und Labels
-x = [item for item in headlines]
-y = [item for item in df1.iloc[:, 1]]
-
-# TF-IDF-Vektorisierung
-vectorizer = TfidfVectorizer()
-x_tfidf = vectorizer.fit_transform(x)
-
-# Aufteilen des Datensatzes in Trainings- und Testsets
-x_train, x_test, y_train, y_test = train_test_split(x_tfidf, y, test_size=0.2, random_state=42)
-
-# Trainieren eines Klassifikators (hier SVM)
-clf = SVC(kernel='linear')
-clf.fit(x_train, y_train)
-
-# Vorhersagen auf dem Testset
-y_pred = clf.predict(x_test)
-
-# Auswertung der Vorhersagegenauigkeit
-accuracy = accuracy_score(y_test, y_pred)
-print("Vorhersagegenauigkeit:", accuracy)
-
-
-
-
 ############################ Transformer
 #News Data: Data Cleaning (lowercase, punctuation removal, stop word removal) Preprocessing (ggf. stemming/lemmatzation, pre-trained NER??)
 #preprocess the text data to clean and tokenize it (ext is split into individual words)
@@ -103,16 +50,37 @@ print("Vorhersagegenauigkeit:", accuracy)
 #Potential Top Mover als interaktives Element: Ergebnisse der Prognose und Anzeigen von Kursen
 
 import pandas as pd
-from tensorflow.keras.layers import TextVectorization, Embedding, Transformer, Dense
-from tensorflow.keras.models import Sequential
-
+import tensorflow as tf
+import numpy as np
 from sklearn.feature_extraction.text import TfidfVectorizer
+
+# import Dataset
+df1 = pd.read_csv("C:/Users/Felix/OneDrive/10_FAU/Semester 6/Machine Learning for Business/Datenblatt1.csv", encoding="ISO-8859-1")
+
+# Alles außer a-z und A-Z entfernen
+data1 = df1.iloc[:, 2:27]
+data1.replace("[^a-zA-Z]", " ", regex=True, inplace=True)
+
+# Spaltennamen in Zahlen ändern
+list1 = [i for i in range(25)]
+new_index = [str(i) for i in list1]
+data1.columns = new_index
+
+# Großbuchstaben in Kleinbuchstaben
+for i in new_index:
+    data1[i] = data1[i].str.lower()
+
+# Daten in jeder Zeile in String konvertieren und zu einem String zusammenfassen
+# => Nachrichten pro Tag in einem String zusammengefasstheadlines = []
+news_articles = []
+for row in range(0, len(data1.index)):
+    news_articles.append(' '.join(str(x) for x in data1.iloc[row, 0:25]))
 
 # Create TF-IDF vectorizer
 vectorizer = TfidfVectorizer(max_features=1000)  # Adjust max_features as needed
 
 # Fit the vectorizer on all news articles
-vectorizer.fit_on_texts(news_articles)
+vectorizer.fit(news_articles)
 
 # Transform news articles into TF-IDF vectors
 tfidf_features = vectorizer.transform(news_articles)
@@ -120,7 +88,8 @@ tfidf_features = vectorizer.transform(news_articles)
 ###################
 # Extract top keywords based on TF-IDF weights
 def get_top_keywords(tfidf_vector, num_keywords=10):
-  keyword_indices = tfidf_vector.argsort()[:,-num_keywords:]  # Get indices of top keywords
+  tfidf_array = tfidf_vector.toarray()  # Convert tfidf_vector to a NumPy array
+  keyword_indices = tfidf_array.argsort()[:,-num_keywords:]
   keywords = vectorizer.get_feature_names_out()[keyword_indices.ravel()]
   return keywords
 
@@ -133,14 +102,10 @@ for tfidf_vec in tfidf_features:
   keyword_features.append(keyword_feature_vector)
     
 ###################
-
-from tensorflow.keras.layers import TextVectorization, Embedding, Transformer, Dense
-from tensorflow.keras.models import Sequential
-
 # Text embedding for raw news text
 max_vocab_size = 10000  # Adjust based on your data
-text_vectorizer = TextVectorization(max_tokens=max_vocab_size)
-text_vectorizer.fit_on_texts(news_articles)
+text_vectorizer = tf.keras.layers.TextVectorization(max_tokens=max_vocab_size)
+text_vectorizer.adapt(news_articles)
 
 # Define look-back window
 look_back = 5  # Number of past days (including features) to consider for prediction
@@ -156,11 +121,14 @@ def create_sequences(features, window_size):
   return sequences
 
 # Prepare training and testing data
-train_features = [news_articles[:train_size], keyword_features[:train_size] if using TF-IDF else topic_features[:train_size]]  # Adjust feature based on your choice
-test_features = [news_articles[train_size:], keyword_features[train_size:] if using TF-IDF else topic_features[train_size:]]
+train_size = int(len(news_articles) * 0.8)
+train_data, test_data = news_articles[:train_size], news_articles[train_size:]
 
-train_sequences = create_sequences(train_features.copy(), look_back)
-test_sequences = create_sequences(test_features.copy(), look_back)
+train_features = news_articles[:train_size], keyword_features[:train_size]  # Adjust feature based on your choice
+test_features = news_articles[train_size:], keyword_features[train_size:]
+
+train_sequences = create_sequences(list(train_features), look_back)
+test_sequences = create_sequences(list(test_features), look_back)
 
 # Convert sequences to numpy arrays
 train_sequences = np.array(train_sequences)

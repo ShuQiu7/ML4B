@@ -1,7 +1,7 @@
 ############################ Transformer
-#News Data: Data Cleaning (lowercase, punctuation removal, stop word removal) Preprocessing (ggf. stemming/lemmatzation, pre-trained NER??)
+#news Data: Data Cleaning (lowercase, punctuation removal, stop word removal) Preprocessing (ggf. stemming/lemmatzation, pre-trained NER??)
 #preprocess the text data to clean and tokenize it (ext is split into individual words)
-#define an embedding layer that maps each word to a vector representation (using pre-trained Word2Vec in this example).
+#define an embedding layer that maps each word to a vector representation (pre-trained Word2Vec).
 #encode the entire text sequence (news headline) using the transformer encoder. This step allows the model to capture relationships between words within the headline.
 #the encoded representation of the news headline is fed as input to the transformer for further processing alongside other features like TF-IDF
 
@@ -40,13 +40,12 @@
 #ggf ConvTransformer/ ConvBERT: apturing local relationships within the text data (e.g., word order) in addition to long-range dependencies
 #Fine Tuning on news before feeding in transformer 
 
-#Fragen??
-#Fine-Tuning pre-trained models: BERT
-#Pre-trained NER model?
-#feed this representation (BERT embeddings or combined representation) as input to transformer encoder?
+#Questions?
+#fine-Tuning pre-trained models: BERT
+#(feed this representation (BERT embeddings or combined representation) as input to transformer encoder?)
 
 #Streamlit:
-#(Relevante) Nachrichten anzeigen
+#Depict relevant news (sector/comapny): NER/ Topic Modelling
 #Potential Top Mover als interaktives Element: Ergebnisse der Prognose und Anzeigen von Kursen
 
 import pandas as pd
@@ -85,7 +84,7 @@ vectorizer.fit(news_articles)
 # Transform news articles into TF-IDF vectors
 tfidf_features = vectorizer.transform(news_articles)
 
-###################
+################### in diesem Abschnitt ist ein "vollständiges" Modellskript unter Einbezug von TF IDF. Die Nummern beziehen sich auf die einzelnen Schritte
 # Extract top keywords based on TF-IDF weights
 def get_top_keywords(tfidf_vector, num_keywords=10):
   tfidf_array = tfidf_vector.toarray()  # Convert tfidf_vector to a NumPy array
@@ -93,6 +92,7 @@ def get_top_keywords(tfidf_vector, num_keywords=10):
   keywords = vectorizer.get_feature_names_out()[keyword_indices.ravel()]
   return keywords
 
+###3.Feature Engineering using TF IDF Scores
 # Create a feature vector for each news article with top keywords (one-hot encoded or similar)
 keyword_features = []
 for tfidf_vec in tfidf_features:
@@ -101,7 +101,6 @@ for tfidf_vec in tfidf_features:
   keyword_feature_vector = ...  # Implement your encoding logic
   keyword_features.append(keyword_feature_vector)
     
-###################
 # Text embedding for raw news text
 max_vocab_size = 10000  # Adjust based on your data
 text_vectorizer = tf.keras.layers.TextVectorization(max_tokens=max_vocab_size)
@@ -167,8 +166,120 @@ predicted_future_price = model.predict(np.array([new_sequence]))
 
 print(f"Predicted future price: {predicted_future_price[0][0]}")
 
+####################### Alternative für einen Transformer (ohne TF IDF/ Topic Modelling)
+import pandas as pd
+from tensorflow.keras.layers import TextVectorization, Embedding, Transformer, Dense
+from tensorflow.keras.models import Sequential
 
-################# Jetzt mit Kursen
+# Load historical data (replace with your data loading logic)
+data = pd.read_csv("your_stock_data.csv")
+date_col = "Date"  # Column containing the date
+price_col = "Close"  # Column containing the closing price
+news_col = "News_Article"  # Column containing the news text (optional)
+
+# Prepare data
+data["Future_Price"] = data[price_col].shift(-1)  # Shift price for prediction
+data.dropna(inplace=True)  # Remove rows with missing values
+
+# Feature engineering (optional)
+# You can add additional features based on your data, like news sentiment score
+
+# Split data into training and testing sets
+train_size = int(len(data) * 0.8)
+train_data, test_data = data[:train_size], data[train_size:]
+
+# Text Preprocessing (if using news articles)
+def preprocess_text(text):
+  # Text cleaning steps like tokenization, lowercasing, etc.
+  # ...
+  return processed_text
+
+train_news = train_data[news_col].apply(preprocess_text)
+test_news = test_data[news_col].apply(preprocess_text)
+
+# Text Vectorization (if using news articles)
+max_vocab_size = 10000  # Adjust based on your data
+vectorizer = TextVectorization(max_tokens=max_vocab_size)
+vectorizer.fit_on_texts(train_news.tolist() + test_news.tolist())
+
+train_news_sequences = vectorizer(train_news.tolist())
+test_news_sequences = vectorizer(test_news.tolist())
+
+# Combining features (consider appropriate concatenation based on your data)
+train_features = {
+    "news": train_news_sequences,
+    "price": train_data[price_col].values.reshape(-1, 1)  # Reshape for 2D array
+}
+test_features = {
+    "news": test_news_sequences,
+    "price": test_data[price_col].values.reshape(-1, 1)
+}
+
+# Define look-back window
+look_back = 5  # Number of past days (including news) to consider for prediction
+
+def create_sequences(features, window_size):
+  sequences = []
+  for i in range(len(features["price"]) - window_size):
+    news_sequence = features["news"][i:i+window_size]
+    price_sequence = features["price"][i:i+window_size]
+    sequence = np.concatenate((news_sequence, price_sequence), axis=1)  # Concatenate news and price
+    sequences.append(sequence)
+  return sequences
+
+train_sequences = create_sequences(train_features.copy(), look_back)
+test_sequences = create_sequences(test_features.copy(), look_back)
+
+# Convert sequences to numpy arrays
+train_sequences = np.array(train_sequences)
+test_sequences = np.array(test_sequences)
+
+# Build Transformer model
+model = Sequential()
+model.add(Embedding(max_vocab_size, embedding_dim=128, input_shape=(look_back, None)))  # Embedding for news
+model.add(Transformer(num_layers=2, units=64, head_size=8))  # Adjust hyperparameters as needed
+model.add(Dense(units=1))  # Output layer for predicted price
+
+# Compile model
+model.compile(loss="mse", optimizer="adam")
+
+# Train the model
+model.fit(train_sequences, train_data["Future_Price"], epochs=50, batch_size=32)
+
+# Make predictions on test data
+predicted_prices = model.predict(test_sequences)
+
+# Evaluate model performance (optional)
+# You can use metrics like mean squared error (MSE) to evaluate
+
+# Use the model for future predictions (replace with your new data)
+new_news = preprocess_text("Your new news article")  # Preprocess new news article
+new_news_sequence = vectorizer(np.array([new_news]))
+new_price_data = [data[price_
+###########Danach ist es abgebrochen
+
+########### Wie wir ggf. BERT nutzen wollen                       
+from transformers import BertTokenizer, TFBertModel
+
+# Load pre-trained BERT tokenizer and model
+tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
+model = TFBertModel.from_pretrained('bert-base-uncased')
+
+# Function to process news article with BERT
+def get_bert_embeddings(article):
+  encoded_inputs = tokenizer(article, return_tensors='tf')
+  outputs = model(encoded_inputs)
+  # Consider using CLS token embedding or pooling strategies
+  document_embedding = outputs.last_hidden_state[:, 0, :]  # CLS token embedding
+  return document_embedding
+
+# Optional: Combine BERT embeddings with topic proportions (as explained earlier)
+
+# Feed BERT embeddings (or combined representation) to Transformer encoder
+# ...
+
+#################Combine embedding layers with the stock price data with the news text and feature vectors 
+#Option 1: Seperate Embeddings (komplexer, aber flexibler)
 # Separate embedding layers
 price_embedding_dim = 8  # Adjust embedding dimension for price data
 
@@ -190,6 +301,141 @@ def create_sequences(features, window_size):
     sequences.append(sequence)
   return sequences
 
+# Update model to handle concatenated embeddings
+# ... (Modify initial layers to concatenate embeddings before feeding to transformer)
+
+#######Option 2: Concatenation
+# Include stock price data in features
+train_features = [news_articles[:train_size], keyword_features[:train_size] if using_tf_idf else topic_features[:train_size], train_data["Close"][:train_size].values.reshape(-1, 1)]  # Reshape price for 2D array
+test_features = [news_articles[train_size:], keyword_features[train_size:] if using_tf_idf else topic_features[train_size:], test_data["Close"][train_size:].values.reshape(-1, 1)]
+
+# Concatenate features in the sequence creation
+def create_sequences(features, window_size):
+  sequences = []
+  for i in range(len(features[0]) - window_size):
+    news_sequence = features[0][i:i+window_size]  # Raw news text sequence
+    feature_sequence = np.concatenate((features[1][i:i+window_size], features[2][i:i+window_size]), axis=1)  # Combine keyword/topic features and price
+    sequence = np.concatenate((text_vectorizer(news_sequence), feature_sequence), axis=1)
+    sequences.append(sequence)
+  return sequences
+
+# Update model input shape to consider all concatenated features
+model.add(Embedding(max_vocab_size, embedding_dim=128, input_shape=(look_back, None)))
+
+################# Modification of model to handle concatenated embeddings for stock price prediction task with news articles and TF-IDF features:
+# Embedding size (number of dimensions) should be the same for both layers
+embedding_dim = 128  # Example embedding size
+
+# Embedding layer for news articles (text data)
+news_embedding = tf.keras.layers.Embedding(max_words, embedding_dim)
+
+# Embedding layer for stock prices (numerical data)
+price_embedding = tf.keras.layers.Embedding(num_stock_features, embedding_dim)
+
+# Normalize stock prices (example)
+def normalize_prices(prices):
+  return (prices - prices.mean()) / (prices.std())
+
+normalized_prices = normalize_prices(data[["Open", "High", "Low", "Close"]])  # Assuming these columns contain prices
+
+# Assuming tfidf_features is the TF-IDF matrix from previous steps
+tfidf_features = np.array(tfidf_features)  # Convert to NumPy array if necessary
+
+# Concatenate embeddings and features
+combined_inputs = tf.keras.layers.concatenate([
+    news_embedding(data["Top 1"]),  # Embedded news headlines
+    tfidf_features,  # TF-IDF features
+    normalized_prices  # Normalized stock prices (if applicable)
+])
+
+# Assuming you have a pre-built Transformer encoder
+transformer_encoder = tf.keras.layers.TransformerEncoder(...?...)  # Replace with your specific encoder configuration
+
+# Feed the concatenated tensor to the encoder
+encoded_outputs = transformer_encoder(combined_inputs)
+
+#Hier geht es darum, den Transformer mit dem Text zu füttern und dann zur prediction zu nutzen
+#####1. Create Word Embedding (ich bin mir noch nicht ganz sicher wie wir das verwenden können/sollen)
+# Define embedding layer (example using pre-trained Word2Vec)
+embedding_dim = 128  # Example embedding size
+embeddings_index = dict(open('word2vec_embeddings.txt').read().splitlines())
+num_words = min(max(word_count[word] for word in vocabulary), len(embeddings_index))
+word_index = {word: i for i, word in enumerate(vocabulary[:num_words])}
+embedding_matrix = np.zeros((num_words, embedding_dim))
+for word, i in word_index.items():
+    if word in embeddings_index:
+        embedding_matrix[i] = embeddings_index[word]
+embedding_layer = tf.keras.layers.Embedding(num_words, embedding_dim, weights=[embedding_matrix], trainable=False)  # Load pre-trained embeddings
+
+# Example using trainable embedding layer
+# embedding_layer = tf.keras.layers.Embedding(max_words, embedding_dim)
+
+#####2.Transformer Encoder (Encoding Text sequence)
+# Assuming you have a pre-built Transformer encoder
+transformer_encoder = tf.keras.layers.TransformerEncoder(...?...)  # Replace with your specific encoder configuration
+
+# Tokenize headlines
+tokenized_headlines = [word_index[word] for headline in data["Top 1"] for word in headline]  # Assuming word_index is a dictionary mapping words to integer indices
+padded_sequences = tf.keras.preprocessing.sequence.pad_sequences(tokenized_headlines, maxlen=max_len)  # Pad sequences to a fixed length
+
+# Get word embeddings for each token in the sequence
+headline_embeddings = embedding_layer(padded_sequences)
+
+# Feed embeddings to Transformer encoder
+encoded_outputs = transformer_encoder(headline_embeddings)
+                       
+
+########## Multi Head Attention (in diesem Fall mit Topic Modelling zu Branchen, aber wichtiges KonzeptJ
+######Within the attention mechanism, each head learns to attend to different parts of the headline encoding based on its relevance to each sector embedding. 
+####This allows the model to identify which sectors are most relevant to the news content, even without explicit mentions.
+
+import tensorflow as tf
+from tensorflow.keras import layers
+
+# Define number of sectors and head count for attention
+num_sectors = 10  # Replace with actual number of sectors
+num_heads = 4
+
+# Define embedding functions (replace with your actual implementation)
+def create_headline_embedding(headline):
+  # ... (Process and embed the headline text)
+  return headline_embedding
+
+def create_sector_embedding(sector_id):
+  # ... (Load or create embedding for the sector)
+  return sector_embedding
+
+# Input layers for headline and sector embeddings
+headline_input = layers.Input(shape=(headline_length,))
+sector_embeddings = layers.Embedding(num_sectors, embedding_dim)(layers.Input(shape=(1,)))
+
+# Headline embedding
+headline_encoding = layers.Embedding(vocab_size, embedding_dim)(headline_input)
+
+# Multi-head attention with learned relevance
+def scaled_dot_product_attention(query, key, value):
+  # ... (Implement scaled dot product attention)
+  return attention_weights
+
+attention_outputs = []
+for _ in range(num_heads):
+  # Project headline and sector embeddings for this head
+  query = layers.Dense(embedding_dim)(headline_encoding)
+  key = layers.Dense(embedding_dim)(sector_embeddings)
+  value = layers.Dense(embedding_dim)(sector_embeddings)
+
+  # Attention weights based on headline and all sector embeddings
+  attention_weights = scaled_dot_product_attention(query, key, value)
+
+  # Weighted sum of sector embeddings based on attention weights
+  context_vector = layers.Lambda(lambda x: tf.matmul(x[0], x[1]))([attention_weights, value])  
+  attention_outputs.append(context_vector)
+
+# Concatenate outputs from all attention heads
+attention_output = layers.Concatenate(axis=-1)(attention_outputs)
+
+# Use the attention output for further processing in your model
+# ...
 
 ############################## Multi Layer Output, um verschiedene Aktienausgaben zu machen
 from tensorflow.keras.layers import Dense
@@ -212,34 +458,6 @@ model.compile(loss="mse", optimizer="adam")  # Mean Squared Error loss for regre
 
 # Train the model on your prepared data
 model.fit(X_train, y_train, epochs=...)  # X_train: Encoded news, y_train: Stock prices for all three companies
-
-
-################################## Topic Modelling mit LDA
-
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.decomposition import LatentDirichletAllocation
-
-# Preprocess news article text (cleaning, tokenization)
-# ...
-
-# Define and fit the LDA model
-vectorizer = TfidfVectorizer(max_features=max_words)
-lda_model = LatentDirichletAllocation(n_components=k, random_state=42)
-lda_model.fit(vectorizer.fit_transform(corpus))
-
-# Get document topic proportions for each news article
-def get_topic_proportions(article):
-  article_vector = vectorizer.transform([article])
-  return lda_model.transform(article_vector)[0]
-
-# Combine word embeddings and topic proportions for each article
-def get_combined_representation(article, word_embeddings):
-  topic_props = get_topic_proportions(article)
-  # Convert article to word indices and lookup word embeddings
-  article_embeddings = word_embeddings[np.array([word_index[word] for word in article.split()])]
-  # Combine word embeddings and topic proportions (consider weighting)
-  combined_representation = np.concatenate([article_embeddings.mean(axis=0), topic_props])
-  return combined_representation
 
 ################################# Konfidenzintervale für den prognostizierten Wert
 import tensorflow as tf
@@ -300,54 +518,9 @@ upper_bound = predictions[:, 1]
 # Utilize the lower and upper bounds for further analysis or visualization
 # ..
 
-############################################  Multi Head Attention with Learning Relevance: Within the attention mechanism, each head learns to attend to different parts of the headline encoding based on its relevance to each sector embedding. 
-####This allows the model to identify which sectors are most relevant to the news content, even without explicit mentions.
-import tensorflow as tf
-from tensorflow.keras import layers
 
-# Define number of sectors and head count for attention
-num_sectors = 10  # Replace with actual number of sectors
-num_heads = 4
-
-# Define embedding functions (replace with your actual implementation)
-def create_headline_embedding(headline):
-  # ... (Process and embed the headline text)
-  return headline_embedding
-
-def create_sector_embedding(sector_id):
-  # ... (Load or create embedding for the sector)
-  return sector_embedding
-
-# Input layers for headline and sector embeddings
-headline_input = layers.Input(shape=(headline_length,))
-sector_embeddings = layers.Embedding(num_sectors, embedding_dim)(layers.Input(shape=(1,)))
-
-# Headline embedding
-headline_encoding = layers.Embedding(vocab_size, embedding_dim)(headline_input)
-
-# Multi-head attention with learned relevance
-def scaled_dot_product_attention(query, key, value):
-  # ... (Implement scaled dot product attention)
-  return attention_weights
-
-attention_outputs = []
-for _ in range(num_heads):
-  # Project headline and sector embeddings for this head
-  query = layers.Dense(embedding_dim)(headline_encoding)
-  key = layers.Dense(embedding_dim)(sector_embeddings)
-  value = layers.Dense(embedding_dim)(sector_embeddings)
-
-  # Attention weights based on headline and all sector embeddings
-  attention_weights = scaled_dot_product_attention(query, key, value)
-
-  # Weighted sum of sector embeddings based on attention weights
-  context_vector = layers.Lambda(lambda x: tf.matmul(x[0], x[1]))([attention_weights, value])  
-  attention_outputs.append(context_vector)
-
-# Concatenate outputs from all attention heads
-attention_output = layers.Concatenate(axis=-1)(attention_outputs)
-
-##################################### feeding news headlines and company information 
+###########NOCH 2 ANSÄTZE ZUM VERKETTEN DER DATEN
+################################Feeding news headlines and company information 
 ######## into a single transformer encoder for stock price prediction
 #### Option 1. Concatenation and Single Encoder:
 import tensorflow as tf
@@ -452,7 +625,37 @@ model.fit([headline_data, company_id_data], stock_price_data, epochs=10)
 predicted_price = model.predict([new_headline, new_company_id])
 
 
-#####################Topic Modelling
+
+
+##################################Optional: Topic Modelling mit LDA (to represent each article with its topic proportions)
+
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.decomposition import LatentDirichletAllocation
+
+# Preprocess news article text (cleaning, tokenization)
+# ...
+
+# Define and fit the LDA model
+vectorizer = TfidfVectorizer(max_features=max_words)
+lda_model = LatentDirichletAllocation(n_components=k, random_state=42)
+lda_model.fit(vectorizer.fit_transform(corpus))
+
+# Get document topic proportions for each news article
+def get_topic_proportions(article):
+  article_vector = vectorizer.transform([article])
+  return lda_model.transform(article_vector)[0]
+
+# Combine word embeddings and topic proportions for each article
+def get_combined_representation(article, word_embeddings):
+  topic_props = get_topic_proportions(article)
+  # Convert article to word indices and lookup word embeddings
+  article_embeddings = word_embeddings[np.array([word_index[word] for word in article.split()])]
+  # Combine word embeddings and topic proportions (consider weighting)
+  combined_representation = np.concatenate([article_embeddings.mean(axis=0), topic_props])
+  return combined_representation
+
+
+#####################Topic Modelling als Teil des Feature Engineering
 from sklearn.decomposition import LatentDirichletAllocation
 
 # Define the number of topics

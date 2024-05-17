@@ -84,7 +84,7 @@ vectorizer.fit(news_articles)
 # Transform news articles into TF-IDF vectors
 tfidf_features = vectorizer.transform(news_articles)
 
-######Einschub, um Aktienkurse für den Transformer zu encoden
+######Einschub, um Aktienkurse für den Transformer zu encoden (nicht sicher ob nötig, da numerische Größe)
 # Stock price encoding model (feed-forward for this example)
 price_model = Sequential()
 price_model.add(Dense(32, activation="relu", input_shape=(stock_prices.shape[1],)))
@@ -447,6 +447,31 @@ attention_output = layers.Concatenate(axis=-1)(attention_outputs)
 # Use the attention output for further processing in your model
 # ...
 
+################### PSEUDOCODE: Multi head attention with company embeddingns
+# Simplified pseudocode for multi-head attention with company embeddings
+
+def multi_head_attention(headline_embedding, price_embedding, company_embeddings):
+  # Project headline, price, and company embeddings to multiple heads
+  head_projections_headline = ...
+  head_projections_price = ...
+  head_projections_company = ... (one embedding per company)
+
+  # Concatenate company embedding with headline and price for each head
+  combined_projections = []
+  for head_h, head_p, company_emb in zip(head_projections_headline, head_projections_price, company_embeddings):
+    combined_projections.append(tf.concat([head_h, head_p, company_emb], axis=-1))
+
+  # Scaled dot-product attention for each head considering combined projections
+  attention_weights = []
+  for combined_proj in combined_projections:
+    attention_weights.append(softmax(scaled_dot_product(combined_proj, combined_proj)))
+
+  # ... (rest of the multi-head attention logic)
+
+
+
+
+
 ############################## Multi Layer Output, um verschiedene Aktienausgaben zu machen
 from tensorflow.keras.layers import Dense
 
@@ -674,6 +699,9 @@ num_topics = 5  # Adjust num_topics as needed
 # Create and fit LDA model
 lda_model = LatentDirichletAllocation(n_components=num_topics, random_state=42)
 lda_topics = lda_model.fit_transform(tfidf_features)
+
+
+#################ggf. Named Entity Recognition
 
 
 

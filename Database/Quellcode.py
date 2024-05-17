@@ -13,7 +13,7 @@
 #=>Encode sequence: each sequence should represent a specific time window (day)
 #Incorporate Stock Data
 #==> Concatenate (during endocding) or Seperate Inputs/Embeddings 
-#!!!!!!Multi-head Attention with Shared Encoder/ Seperate Embeddings
+#!Multi-head Attention with Shared Encoder/ Seperate Embeddings
 #Pediction Layer on top of the Encoder: combining them
 #OR Multi head Attention with seperate Encoders: Encoded representation of stock prices necessary
 

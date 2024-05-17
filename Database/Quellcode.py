@@ -84,6 +84,16 @@ vectorizer.fit(news_articles)
 # Transform news articles into TF-IDF vectors
 tfidf_features = vectorizer.transform(news_articles)
 
+######Einschub, um Aktienkurse für den Transformer zu encoden
+# Stock price encoding model (feed-forward for this example)
+price_model = Sequential()
+price_model.add(Dense(32, activation="relu", input_shape=(stock_prices.shape[1],)))
+price_model.add(Dense(16, activation="relu"))
+price_model.add(Dense(8, activation="relu"))
+price_model.compile(loss="mse", optimizer="adam")
+price_model.fit(stock_prices, np.zeros((len(stock_prices), 8)), epochs=10)  # Train on dummy target
+
+
 ################### in diesem Abschnitt ist ein "vollständiges" Modellskript unter Einbezug von TF IDF. Die Nummern beziehen sich auf die einzelnen Schritte
 # Extract top keywords based on TF-IDF weights
 def get_top_keywords(tfidf_vector, num_keywords=10):

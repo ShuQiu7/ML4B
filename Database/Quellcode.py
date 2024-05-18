@@ -52,13 +52,16 @@ import pandas as pd
 import tensorflow as tf 
 import numpy as np
 from sklearn.feature_extraction.text import TfidfVectorizer
+from transformers import BertTokenizer, TFBertModel
+from sklearn.decomposition import LatentDirichletAllocation
+
 
 # import Dataset
 df1 = pd.read_csv("C:/Users/Felix/OneDrive/10_FAU/Semester 6/Machine Learning for Business/Datenblatt1 - gekürzt.csv", encoding="ISO-8859-1")
-stock_prices = pd.read_csv("C:/Users/Felix/OneDrive/10_FAU/Semester 6/Machine Learning for Business/stockprices.csv")
 
 # Alles außer a-z und A-Z entfernen
 data1 = df1.iloc[:, 2:27]
+data2 = df1.iloc[:, 1]
 data1.replace("[^a-zA-Z]", " ", regex=True, inplace=True)
 
 # Spaltennamen in Zahlen ändern
@@ -76,6 +79,9 @@ news_articles = []
 for row in range(0, len(data1.index)):
     news_articles.append(' '.join(str(x) for x in data1.iloc[row, 0:25]))
 
+stock_move = []
+for row in range(0, len(data2.index)):
+    stock_move.append(str(x) for x in data2)
 # Create TF-IDF vectorizer
 vectorizer = TfidfVectorizer(max_features=1000)  # Adjust max_features as needed
 
@@ -85,15 +91,14 @@ vectorizer.fit(news_articles)
 # Transform news articles into TF-IDF vectors
 tfidf_features = vectorizer.transform(news_articles)
 
-######Einschub, um Aktienkurse für den Transformer zu encoden (nicht sicher ob nötig, da numerische Größe)
-# Stock price encoding model (feed-forward for this example)
-price_model = tf.keras.models.Sequential()
-price_model.add(tf.keras.layers.Dense(32, activation="relu", input_shape=(stock_prices.shape[1],)))
-price_model.add(tf.keras.layers.Dense(16, activation="relu"))
-price_model.add(tf.keras.layers.Dense(8, activation="relu"))
-price_model.compile(loss="mse", optimizer="adam")
-#price_model.fit(stock_prices, np.zeros((len(stock_prices), 8)), epochs=10)  # Train on dummy target
-# Aktuell auskommentiert, das das erste mit einem passenden Datensatz kompiliert
+# ######Einschub, um Aktienkurse für den Transformer zu encoden (nicht sicher ob nötig, da numerische Größe)
+# # Stock price encoding model (feed-forward for this example)
+# price_model = tf.keras.models.Sequential()
+# price_model.add(tf.keras.layers.Dense(32, activation="relu", input_shape=(stock_move.shape[0])))
+# price_model.add(tf.keras.layers.Dense(16, activation="relu"))
+# price_model.add(tf.keras.layers.Dense(8, activation="relu"))
+# price_model.compile(loss="mse", optimizer="adam")
+# price_model.fit(stock_prices, np.zeros((len(stock_prices), 8)), epochs=10)  # Train on dummy target
 
 
 ################### in diesem Abschnitt ist ein "vollständiges" Modellskript unter Einbezug von TF IDF. Die Nummern beziehen sich auf die einzelnen Schritte
@@ -148,7 +153,7 @@ test_sequences = np.array(test_sequences)
 # Build Transformer model (adjust hyperparameters as needed)
 model = tf.keras.models.Sequential()
 model.add(tf.keras.layers.Embedding(max_vocab_size, input_shape=(look_back, None), output_dim = 128))
-#model.add(tf.keras.layers.MultiHeadAttention(num_heads=4, key_dim=64)([train_query, train_value])) currently doesnt work
+model.add(tf.keras.layers.MultiHeadAttention(num_heads=4, key_dim=64))
 model.add(tf.keras.layers.Dense(units=1))  # Output layer for predicted price
 
 # Compile and train the model
@@ -158,20 +163,14 @@ model.fit(train_sequences, train_data["Future_Price"], epochs=50, batch_size=32)
 # Make predictions on test data
 predicted_prices = model.predict(test_sequences)
 
-# Evaluate model performance (optional)
-# You can use metrics like mean squared error (MSE) to evaluate
-
 # Use the model for future predictions (replace with your new data)
 new_news_article = "Your new news article"
 new_news_sequence = text_vectorizer.predict(np.array([new_news_article]))
 
-# Prepare feature for new data (based on your chosen method)
-if using_tf_idf:
-  new_keyword_features = get_top_keywords(vectorizer.transform([new_news_article])[0])
-  # Encode keywords into your desired feature representation
-  new_feature_sequence = ...  # Implement your encoding logic
-elif using_topic_modeling:
-  new_topic_features = lda_model.transform(vectorizer.transform([new_news_article])[0])
+# Prepare feature for new data
+new_keyword_features = get_top_keywords(vectorizer.transform([new_news_article])[0])
+# Encode keywords into your desired feature representation
+new_feature_sequence = ...  # Implement your encoding logic
 
 new_sequence = np.concatenate((new_news_sequence, new_feature_sequence), axis=1)
 predicted_future_price = model.predict(np.array([new_sequence]))
@@ -266,9 +265,8 @@ print(f"Predicted future price: {predicted_future_price[0][0]}")
 # new_price_data = predicted_prices
 # ###########Danach ist es abgebrochen
 
-########### Wie wir ggf. BERT nutzen wollen                       
-from transformers import BertTokenizer, TFBertModel
 
+########### Wie wir ggf. BERT nutzen wollen                       
 # Load pre-trained BERT tokenizer and model
 tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
 model = TFBertModel.from_pretrained('bert-base-uncased')
@@ -294,7 +292,7 @@ price_embedding_dim = 8  # Adjust embedding dimension for price data
 model = tf.keras.models.Sequential()
 model.add(tf.keras.layers.Embedding(max_vocab_size, embedding_dim=128, input_shape=(look_back, None)))  # Embedding for news text
 model.add(tf.keras.layers.Embedding(1, price_embedding_dim, input_length=1))  # Embedding for price (one-hot or similar)  
-model.add(Transformer(num_layers=2, units=64, head_size=8))
+model.add(tf.keras.layers.MultiHeadAttention(num_heads=4, key_dim=64))
 model.add(tf.keras.layers.Dense(units=1))  # Output layer for predicted price# ... (Rest of the transformer architecture)
 
 # Concatenate embeddings before feeding to transformer layers
@@ -314,8 +312,8 @@ def create_sequences(features, window_size):
 
 #######Option 2: Concatenation
 # Include stock price data in features
-train_features = [news_articles[:train_size], keyword_features[:train_size] if using_tf_idf else topic_features[:train_size], train_data["Close"][:train_size].values.reshape(-1, 1)]  # Reshape price for 2D array
-test_features = [news_articles[train_size:], keyword_features[train_size:] if using_tf_idf else topic_features[train_size:], test_data["Close"][train_size:].values.reshape(-1, 1)]
+train_features = [news_articles[:train_size], keyword_features[:train_size]] # if using_tf_idf else topic_features[:train_size], train_data["Close"][:train_size].values.reshape(-1, 1)]  # Reshape price for 2D array
+test_features = [news_articles[train_size:], keyword_features[train_size:]] # if using_tf_idf else topic_features[train_size:], test_data["Close"][train_size:].values.reshape(-1, 1)]
 
 # Concatenate features in the sequence creation
 def create_sequences(features, window_size):
@@ -331,14 +329,12 @@ def create_sequences(features, window_size):
 model.add(tf.keras.layers.Embedding(max_vocab_size, embedding_dim=128, input_shape=(look_back, None)))
 
 ################# Modification of model to handle concatenated embeddings for stock price prediction task with news articles and TF-IDF features:
-# Embedding size (number of dimensions) should be the same for both layers
-embedding_dim = 128  # Example embedding size
 
 # Embedding layer for news articles (text data)
-news_embedding = tf.keras.layers.Embedding(max_words, embedding_dim)
+news_embedding = tf.keras.layers.Embedding(max_words = 10000, embedding_dim = 128)
 
 # Embedding layer for stock prices (numerical data)
-price_embedding = tf.keras.layers.Embedding(num_stock_features, embedding_dim)
+price_embedding = tf.keras.layers.Embedding(num_stock_features = 2, embedding_dim = 128)
 
 # Normalize stock prices (example)
 def normalize_prices(prices):
@@ -396,9 +392,6 @@ encoded_outputs = transformer_encoder(headline_embeddings)
 ########## Multi Head Attention (in diesem Fall mit Topic Modelling zu Branchen, aber wichtiges KonzeptJ
 ######Within the attention mechanism, each head learns to attend to different parts of the headline encoding based on its relevance to each sector embedding. 
 ####This allows the model to identify which sectors are most relevant to the news content, even without explicit mentions.
-
-import tensorflow as tf
-from tensorflow.keras import layers
 
 # Define number of sectors and head count for attention
 num_sectors = 10  # Replace with actual number of sectors
@@ -468,8 +461,6 @@ def multi_head_attention(headline_embedding, price_embedding, company_embeddings
 
 
 
-
-
 ############################## Multi Layer Output, um verschiedene Aktienausgaben zu machen
 # Assuming you have a pre-built Transformer encoder and encoded outputs for the news headlines
 
@@ -491,7 +482,6 @@ model.compile(loss="mse", optimizer="adam")  # Mean Squared Error loss for regre
 model.fit(X_train, y_train, epochs=...)  # X_train: Encoded news, y_train: Stock prices for all three companies
 
 ################################# Konfidenzintervale für den prognostizierten Wert
-import tensorflow as tf
 
 # Assuming you have your trained transformer model with two outputs:
 # - mean_prediction (predicted mean stock price)
@@ -508,9 +498,6 @@ lower_bound = mean_prediction - z_score * std_prediction
 upper_bound = mean_prediction + z_score * std_prediction
 
 ##################### Alternativ: Quantile Regression
-
-import tensorflow as tf
-from tensorflow.keras import layers
 
 # Define the desired quantiles (e.g., 0.025 and 0.975 for 95% confidence interval)
 lower_quantile = 0.025
@@ -554,8 +541,6 @@ upper_bound = predictions[:, 1]
 ################################Feeding news headlines and company information 
 ######## into a single transformer encoder for stock price prediction
 #### Option 1. Concatenation and Single Encoder:
-import tensorflow as tf
-from tensorflow.keras import layers
 
 # Define maximum headline length and vocabulary size
 max_headline_len = 100  # Replace with appropriate value
@@ -602,8 +587,6 @@ predicted_price = model.predict([new_headline, new_company_id])
 
 
 ###### Option 2. Multi-Input Transformer with Separate Encoders: 
-import tensorflow as tf
-from tensorflow.keras import layers
 
 # Define maximum headline length and vocabulary size
 max_headline_len = 100  # Replace with appropriate value
@@ -656,12 +639,9 @@ model.fit([headline_data, company_id_data], stock_price_data, epochs=10)
 predicted_price = model.predict([new_headline, new_company_id])
 
 
-
-
 ##################################Optional: Topic Modelling mit LDA (to represent each article with its topic proportions)
 
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.decomposition import LatentDirichletAllocation
+
 
 # Preprocess news article text (cleaning, tokenization)
 # ...
@@ -687,7 +667,6 @@ def get_combined_representation(article, word_embeddings):
 
 
 #####################Topic Modelling als Teil des Feature Engineering
-from sklearn.decomposition import LatentDirichletAllocation
 
 # Define the number of topics
 num_topics = 5  # Adjust num_topics as needed
@@ -698,6 +677,3 @@ lda_topics = lda_model.fit_transform(tfidf_features)
 
 
 #################ggf. Named Entity Recognition
-
-
-

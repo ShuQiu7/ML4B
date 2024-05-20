@@ -126,6 +126,7 @@ text_vectorizer.adapt(news_articles)
 # Define look-back window
 look_back = 5  # Number of past days (including features) to consider for prediction
 
+print(news_articles)
 def create_sequences(features, window_size):
   sequences = []
   for i in range(len(features[0]) - window_size):
@@ -143,22 +144,22 @@ train_data, test_data = news_articles[:train_size], news_articles[train_size:]
 train_features = news_articles[:train_size], keyword_features[:train_size]  # Adjust feature based on your choice
 test_features = news_articles[train_size:], keyword_features[train_size:]
 
-train_sequences = create_sequences(list(train_features), look_back)
-test_sequences = create_sequences(list(test_features), look_back)
+train_features[0]
+#train_sequences = create_sequences(list(train_features), look_back)
+#test_sequences = create_sequences(list(test_features), look_back)
 
 # Convert sequences to numpy arrays
-train_sequences = np.array(train_sequences)
-test_sequences = np.array(test_sequences)
+train_sequences = np.array(train_features) # müsste eigentlich train_sequence sein
+test_sequences = np.array(test_features) # müsste eigentlich test_sequence sein
 
 # Build Transformer model (adjust hyperparameters as needed)
 model = tf.keras.models.Sequential()
 model.add(tf.keras.layers.Embedding(max_vocab_size, input_shape=(look_back, None), output_dim = 128))
-model.add(tf.keras.layers.MultiHeadAttention(num_heads=4, key_dim=64))
 model.add(tf.keras.layers.Dense(units=1))  # Output layer for predicted price
 
 # Compile and train the model
 model.compile(loss="mse", optimizer="adam")
-model.fit(train_sequences, train_data["Future_Price"], epochs=50, batch_size=32)
+model.fit(train_sequences, train_data, epochs=50, batch_size=32)
 
 # Make predictions on test data
 predicted_prices = model.predict(test_sequences)

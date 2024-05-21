@@ -43,6 +43,65 @@ def preprocess_text(text):
 
   return text
 
+############## Einschub Anfang
+#### TF IDF 
+# Create TF-IDF vectorizer
+vectorizer = TfidfVectorizer(max_features=1000)  # Adjust max_features as needed
+
+# Fit the vectorizer on all news articles
+vectorizer.fit_on_texts(news_articles) #Funktioniert das????
+
+# Transform news articles into TF-IDF vectors
+tfidf_features = vectorizer.transform(news_articles)
+
+#### Topic Modelling
+# Define the number of topics
+num_topics = 5  # Adjust num_topics as needed
+
+# Create and fit LDA model
+lda_model = LatentDirichletAllocation(n_components=num_topics, random_state=42)
+lda_topics = lda_model.fit_transform(tfidf_features)
+
+##### Feature Engineering
+# Using TF IDF Scores
+def create_keyword_features(tfidf_vec, vocabulary, top_k=10):
+  top_keywords = get_top_keywords(tfidf_vec)[:top_k]  # Get top k keywords
+  keyword_feature_vector = np.zeros(len(vocabulary))  # Initialize empty vector
+  for keyword in top_keywords:
+    if keyword in vocabulary:  # Check if keyword exists in vocabulary
+      keyword_feature_vector[vocabulary.index(keyword)] = 1  # Set 1 for the keyword index
+  return keyword_feature_vector
+
+# Example usage with vocabulary
+vocabulary = tfidf_vectorizer.get_feature_names_out()  # Assuming tfidf_vectorizer is used
+keyword_features = []
+for tfidf_vec in tfidf_features:
+  keyword_feature_vector = create_keyword_features(tfidf_vec, vocabulary)
+  keyword_features.append(keyword_feature_vector)
+
+# Using Topic Modelling Results 
+# Use the dominant topic for each news article (one-hot encoded or similar)
+topic_features = lda_topics
+
+# Prepare training and testing data
+#train_features = [news_articles[:train_size], keyword_features[:train_size] if using TF-IDF else topic_features[:train_size]]  # Adjust feature based on your choice
+#test_features = [news_articles[train_size:], keyword_features[train_size:] if using TF-IDF else topic_features[train_size:]]
+
+#train_sequences = create_sequences(train_features.copy(), look_back)
+#test_sequences = create_sequences(test_features.copy(), look_back)
+
+# Convert sequences to numpy arrays
+#train_sequences = np.array(train_sequences)
+#test_sequences = np.array(test_sequences)
+
+# Build Transformer model (adjust hyperparameters as needed)
+#model = Sequential()
+#model.add(Embedding(max_vocab_size, embedding_dim=128, input_shape=(look_back, None)))
+#model.add(Transformer(num_layers=2, units=64, head_size=8))
+#model.add(Dense(units=1))  # Output layer for predicted price
+
+
+############## Einschub Ende
 
 # Apply preprocessing to each headline
 train_news = train_data[news_col].apply(preprocess_text)
@@ -59,23 +118,38 @@ test_news_sequences = vectorizer(test_news.tolist())
 # Combining features (consider appropriate concatenation based on your data)
 train_features = {
     "news": train_news_sequences,
-    "price": train_data[price_col].values.reshape(-1, 1)  # Reshape for 2D array
+    "price": train_data[price_col].values.reshape(-1, 1),  # Reshape for 2D array
+    "keywords": keyword_features, #Funktioniert das??
+    "topics": lda_topics
 }
 test_features = {
     "news": test_news_sequences,
     "price": test_data[price_col].values.reshape(-1, 1)
+    "keywords": keyword_features #Funktioniert das??
+    "topics": lda_topics
 }
 
 # Define look-back window
 look_back = 5  # Number of past days (including news) to consider for prediction
+
+# def create_sequences(features, window_size):
+#  sequences = []
+# for i in range(len(features["price"]) - window_size):
+#   news_sequence = features["news"][i:i+window_size]
+#   price_sequence = features["price"][i:i+window_size]
+    # feature_sequence = features[1][i:i+window_size]  # Feature sequence (keywords or topics)
+#   sequence = np.concatenate((news_sequence, price_sequence), axis=1)  # Concatenate news and price
+#   sequences.append(sequence)
+# return sequences
 
 def create_sequences(features, window_size):
   sequences = []
   for i in range(len(features["price"]) - window_size):
     news_sequence = features["news"][i:i+window_size]
     price_sequence = features["price"][i:i+window_size]
-    # feature_sequence = features[1][i:i+window_size]  # Feature sequence (keywords or topics)
-    sequence = np.concatenate((news_sequence, price_sequence), axis=1)  # Concatenate news and price
+    keyword_sequence = features["keywords"][i:i+window_size]
+    topic_sequence = features["topics"][i:i+window_size].reshape(-1, 1)  # Reshape for concatenation
+    sequence = np.concatenate((news_sequence, price_sequence, keyword_sequence, topic_sequence), axis=1)  # Concatenate all sequences
     sequences.append(sequence)
   return sequences
 
@@ -100,3 +174,41 @@ model.fit(train_sequences, train_data["Future_Price"], epochs=50, batch_size=32)
 
 # Make predictions on test data
 predicted_prices = model.predict(test_sequences)
+
+
+################Experimentell für neue Nachrichten
+# Prepare feature for new data (based on your chosen method)
+if using_tf_idf:
+  new_keyword_features = get_top_keywords(vectorizer.transform([new_news_article])[0])
+  # Encode keywords into your desired feature representation
+  new_feature_sequence = ...  # Implement your encoding logic
+elif using_topic_modeling:
+  new_topic_features = lda_model.transform(vectorizer.transform([new_news_article])[0])
+
+new_sequence = np.concatenate((new_news_sequence, new_feature_sequence), axis=1)
+predicted_future_price = model.predict(np.array([new_sequence]))
+
+print(f"Predicted future price: {predicted_future_price[0][0]}")
+
+###### bzw. 
+# Reshape the new news sequence for consistency
+new_news_sequence = np.reshape(new_news_sequence, (1, look_back, -1))  # Reshape for compatibility
+
+# Include logic for new price data (replace with your actual approach)
+# Assuming you want to use the most recent closing price
+new_price_data = np.array([[data[price_col].iloc[-1]]])  # Access the last closing price
+
+# Combine new news and price data
+new_data = {
+    "news": new_news_sequence,
+    "price": new_price_data
+}
+
+# Create a sequence from the new data
+new_sequence = create_sequences(new_data.copy(), look_back)
+new_sequence = np.array(new_sequence)
+
+# Predict the future price using the trained model
+predicted_price = model.predict(new_sequence)[0][0]  # Access the first element from the prediction
+
+print(f"Predicted future price: {predicted_price}")

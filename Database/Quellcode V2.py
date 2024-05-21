@@ -6,15 +6,17 @@ from transformers import BertTokenizer, TFBertModel
 from sklearn.decomposition import LatentDirichletAllocation
 
 # Load historical data (replace with your data loading logic)
-data = pd.read_csv("your_stock_data.csv")
-date_col = "Date"  # Column containing the date
-price_col = "Close"  # Column containing the closing price
-news_col = "News_Article"  # Column containing the news text (optional)
+data = pd.read_csv("C:/Users/Felix/OneDrive/10_FAU/Semester 6/Machine Learning for Business/GOOGLE.csv", encoding="utf-8", delimiter=";")
+
+date_col = data.iloc[:, 0]  # Column containing the date
+price_col = data.iloc[:, 2]  # Column containing the closing price
+news_col = data.iloc[:, 1]  # Column containing the news text (optional)
 
 # Prepare data
-data["Future_Price"] = data[price_col].shift(-1)  # Shift price for prediction
+data.iloc[:, 4] = data.iloc[:, 2].shift(-1)  # Shift price for prediction
 data.dropna(inplace=True)  # Remove rows with missing values
 
+print(data.iloc[1, 4], data.iloc[1, 2])
 # Feature engineering (optional)
 # You can add additional features based on your data, like news sentiment score
 
@@ -89,6 +91,4 @@ predicted_prices = model.predict(test_sequences)
 # Use the model for future predictions (replace with your new data)
 new_news = preprocess_text("Your new news article")  # Preprocess new news article
 new_news_sequence = vectorizer(np.array([new_news]))
-new_price_data = [data[price_
-###########Danach ist es abgebrochen
-
+new_price_data = predicted_prices

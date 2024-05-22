@@ -13,7 +13,6 @@ date_col = "Date"  # Column containing the date
 price_col = "Close"  # Column containing the closing price
 news_col = "News_Article"  # Column containing the news text (optional)
 
-
 # Prepare data
 data.iloc[:, 4] = data.iloc[:, 2].shift(-1)  # Shift price for prediction
 data.dropna(inplace=True)  # Remove rows with missing values
@@ -86,12 +85,12 @@ test_sequences = np.array(test_sequences)
 # Build Transformer model
 model = tf.keras.Sequential()
 model.add(tf.keras.layers.Embedding(max_vocab_size, output_dim = 150, input_shape=(look_back, None)))  # Embedding for news
-model.add(tf.keras.layers.MultiHeadAttention(num_heads=8, key_dim=64))  # Adjust hyperparameters as needed; funktioniert noch nicht.
+#model.add(tf.keras.layers.MultiHeadAttention(num_heads=8, key_dim=64))  # Adjust hyperparameters as needed; funktioniert noch nicht.
 model.add(tf.keras.layers.Dense(units=1))  # Output layer for predicted price
 
 # Compile model
 model.compile(loss="mse", optimizer="adam")
-print(len(train_sequences[3]))
+
 # Train the model
 model.fit(train_sequences, train_data[price_col][look_back:], epochs=10, batch_size=32)
 
@@ -99,3 +98,4 @@ model.fit(train_sequences, train_data[price_col][look_back:], epochs=10, batch_s
 #predicted_prices = model.predict(test_sequences)
 
 # TO-DO: https://chatgpt.com/c/47abbd10-da3b-429c-ab51-e9aaa6410826
+

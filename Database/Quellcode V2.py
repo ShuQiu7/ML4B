@@ -107,7 +107,7 @@ import pandas as pd
 from datetime import datetime
 
 # Define your API key and endpoint
-api_key = 'YOUR_NEWS_API_KEY'
+api_key = '5a9f2b08c11f43b0a3fcde731a6b8707'
 endpoint = 'https://newsapi.org/v2/everything'
 
 # Parameters for the API request

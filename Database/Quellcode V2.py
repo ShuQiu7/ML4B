@@ -87,14 +87,14 @@ test_sequences = np.array(test_sequences)
 # Build Transformer model
 model = tf.keras.Sequential()
 model.add(tf.keras.layers.Embedding(max_vocab_size, output_dim = 150, input_shape=(look_back, None)))  # Embedding for news
-#model.add(tf.keras.layers.MultiHeadAttention(num_heads=8, key_dim=64))  # Adjust hyperparameters as needed; funktioniert noch nicht.
+#FUNKTIONIERT NOCH NICHT# model.add(tf.keras.layers.MultiHeadAttention(num_heads=8, key_dim=64))  # Adjust hyperparameters as needed; funktioniert noch nicht.
 model.add(tf.keras.layers.Dense(units=1))  # Output layer for predicted price
 
 # Compile model
 model.compile(loss="mse", optimizer="adam")
 
 # Train the model
-model.fit(train_sequences, train_data[price_col][look_back:], epochs=10, batch_size=32)
+#FUNKTIONIERT NICH NICHT# model.fit(train_sequences, train_data[price_col][look_back:], epochs=10, batch_size=32)
 
 # Make predictions on test data
 #predicted_prices = model.predict(test_sequences)
@@ -144,7 +144,46 @@ existing_df = pd.DataFrame(columns=['Headline', 'Date'])  # Or load from an exis
 new_news_df = fetch_financial_news(endpoint, params)
 
 # Append new rows to the existing DataFrame
-updated_df = existing_df.append(new_news_df, ignore_index=True)
+updated_df = pd.concat([existing_df, new_news_df], ignore_index=True)
 
 # Optionally, save the updated DataFrame to a CSV file
 updated_df.to_csv('financial_news.csv', index=False)
+
+
+
+
+# Function to fetch stock data and return a DataFrame
+def fetch_stock_data(ticker, start_date, end_date):
+    stock = yf.Ticker(ticker)
+    data = stock.history(start=start_date, end=end_date)
+    
+    # Reset the index to make 'Date' a column
+    data.reset_index(inplace=True)
+    
+    # Keep only the relevant columns
+    data = data[['Date', 'Open', 'High', 'Low', 'Close', 'Volume']]
+    
+    return data
+
+# Parameters
+ticker_symbol = 'AAPL'  # Example ticker symbol for Apple Inc.
+start_date = '2022-01-01'
+end_date = '2022-12-31'
+
+# Fetch stock data
+stock_data_df = fetch_stock_data(ticker_symbol, start_date, end_date)
+
+# Display the DataFrame
+print(stock_data_df)
+
+#bzw. bei existierendem DataFrame
+existing_stock_df = pd.DataFrame(columns=['Date', 'Open', 'High', 'Low', 'Close', 'Volume'])  # Or load from an existing file
+
+# Fetch new stock data
+new_stock_data_df = fetch_stock_data(ticker_symbol, start_date, end_date)
+
+# Append new rows to the existing DataFrame
+updated_stock_df = pd.concat([existing_stock_df, new_stock_data_df], ignore_index=True)
+
+# Optionally, save the updated DataFrame to a CSV file
+updated_stock_df.to_csv('stock_prices.csv', index=False)

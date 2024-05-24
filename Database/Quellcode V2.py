@@ -183,7 +183,36 @@ existing_stock_df = pd.DataFrame(columns=['Date', 'Open', 'High', 'Low', 'Close'
 new_stock_data_df = fetch_stock_data(ticker_symbol, start_date, end_date)
 
 # Append new rows to the existing DataFrame
-updated_stock_df = pd.concat([existing_stock_df, new_stock_data_df], ignore_index=True)
+updated_stock_df = pd.concat([existing_stock_df, new_stock_data_df], ignore_index=True
 
 # Optionally, save the updated DataFrame to a CSV file
 updated_stock_df.to_csv('stock_prices.csv', index=False)
+
+                             
+
+(# Use the model for future predictions (replace with your new data)
+new_news = preprocess_text("Your new news article")  # Preprocess new news article
+new_news_sequence = vectorizer(np.array([new_news]))
+new_price_data = [data[price_)
+
+# Reshape the new news sequence for consistency
+new_news_sequence = np.reshape(new_news_sequence, (1, look_back, -1))  # Reshape for compatibility
+
+# Include logic for new price data (replace with your actual approach)
+# Assuming you want to use the most recent closing price
+new_price_data = np.array([[data[price_col].iloc[-1]]])  # Access the last closing price
+
+# Combine new news and price data
+new_data = {
+    "news": new_news_sequence,
+    "price": new_price_data
+}
+
+# Create a sequence from the new data
+new_sequence = create_sequences(new_data.copy(), look_back)
+new_sequence = np.array(new_sequence)
+
+# Predict the future price using the trained model
+predicted_price = model.predict(new_sequence)[0][0]  # Access the first element from the prediction
+
+print(f"Predicted future price: {predicted_price}")

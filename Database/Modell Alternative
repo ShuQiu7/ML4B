@@ -1,0 +1,472 @@
+To help the model understand which news articles are relevant to a specific company's stock price, you can incorporate several strategies. These strategies can be integrated into the model's preprocessing and feature engineering steps to improve the relevance of the news data. Here are some key approaches:
+
+### 1. Named Entity Recognition (NER)
+Use NER to identify company names and other relevant entities in the news articles. This helps in determining whether the news article mentions the company explicitly.
+
+### 2. News Filtering
+Filter news articles based on the presence of the company's name or related keywords. This ensures that only relevant news articles are considered.
+
+### 3. Additional Features
+Incorporate additional features that indicate the relevance of the news article to the company. These features can include:
+- **Mention Count**: Number of times the company is mentioned in the article.
+- **Keyword Matching**: Presence of specific keywords related to the company or industry.
+
+### 4. Attention Mechanism
+Incorporate an attention mechanism in the model to weigh the importance of different parts of the news article, allowing the model to focus on relevant information.
+
+### 5. News Sentiment
+Use sentiment analysis to assess the sentiment of the news article towards the company, which can be a significant indicator of its impact on stock price.
+
+### Implementation
+
+Here’s how you can integrate these strategies into the existing script:
+
+#### Step 1: Load Libraries and Initialize Models
+
+```python
+import os
+import re
+import pandas as pd
+import numpy as np
+import spacy
+import requests
+import yfinance as yf
+from textblob import TextBlob
+from sklearn.preprocessing import LabelEncoder
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.decomposition import LatentDirichletAllocation
+from sklearn.model_selection import train_test_split, KFold
+from transformers import BertTokenizer, TFBertModel
+from tensorflow.keras.layers import TextVectorization, Embedding, Dense, Input, Concatenate, LayerNormalization, Dropout, LSTM, GRU
+from tensorflow.keras.models import Model
+from tensorflow.keras.optimizers import Adam
+from tensorflow.keras.callbacks import EarlyStopping
+import tensorflow as tf
+import nltk
+
+# Download NLTK data
+nltk.download('stopwords')
+nltk.download('wordnet')
+
+# Initialize Spacy model and NLTK components
+nlp = spacy.load("en_core_web_sm")
+stop_words = set(nltk.corpus.stopwords.words('english'))
+lemmatizer = nltk.stem.WordNetLemmatizer()
+
+# Load dataset
+data = pd.read_csv("path_to_your_dataset.csv")
+
+# Column names
+date_col = "Date"
+news_col = "News_Article"
+price_cols = ["Apple_Price", "Amazon_Price", "Google_Price"]
+companies = ["Apple", "Amazon", "Google"]
+
+# Convert date column to datetime
+data[date_col] = pd.to_datetime(data[date_col])
+data.sort_values(by=date_col, inplace=True)
+
+# Function to preprocess text
+def preprocess_text(text):
+    text = re.sub(r'[^a-zA-Z\s]', '', text, re.I | re.A)
+    text = text.lower()
+    text = text.strip()
+    tokens = text.split()
+    tokens = [word for word in tokens if word not in stop_words]
+    tokens = [lemmatizer.lemmatize(word) for word in tokens]
+    processed_text = ' '.join(tokens)
+    return processed_text
+
+# Preprocess news articles
+data[news_col] = data[news_col].apply(preprocess_text)
+
+# Perform NER
+def extract_entities(text):
+    doc = nlp(text)
+    entities = [ent.text for ent in doc.ents if ent.label_ in ["ORG", "GPE"]]
+    return entities
+
+data["Entities"] = data[news_col].apply(extract_entities)
+
+# Function to check if a news article is relevant to a company
+def is_relevant(entities, company):
+    return int(company.lower() in (e.lower() for e in entities))
+
+# Create relevance features for each company
+for company in companies:
+    data[f"{company}_Relevant"] = data["Entities"].apply(lambda x: is_relevant(x, company))
+
+# Perform Sentiment Analysis
+def get_sentiment(text):
+    return TextBlob(text).sentiment.polarity
+
+data["Sentiment"] = data[news_col].apply(get_sentiment)
+
+# Apply TF-IDF Vectorization
+vectorizer_tfidf = TfidfVectorizer(max_features=5000)
+tfidf_matrix = vectorizer_tfidf.fit_transform(data[news_col]).toarray()
+
+# Apply Topic Modeling with LDA
+n_topics = 10
+lda = LatentDirichletAllocation(n_components=n_topics, random_state=42)
+topics_matrix = lda.fit_transform(tfidf_matrix)
+
+# Initialize BERT model and tokenizer
+bert_model_name = 'bert-base-uncased'
+tokenizer = BertTokenizer.from_pretrained(bert_model_name)
+bert_model = TFBertModel.from_pretrained(bert_model_name)
+
+# Function to get BERT embeddings
+def get_bert_embeddings(texts):
+    inputs = tokenizer(texts, return_tensors='tf', padding=True, truncation=True, max_length=512)
+    outputs = bert_model(inputs)
+    embeddings = outputs.last_hidden_state[:, 0, :].numpy()  # CLS token
+    return embeddings
+
+# Get BERT embeddings for news articles
+bert_embeddings = get_bert_embeddings(data[news_col].tolist())
+
+# Combine features
+data["TFIDF"] = list(tfidf_matrix)
+data["Topics"] = list(topics_matrix)
+data["BERT_Embeddings"] = list(bert_embeddings)
+
+# Define look-back window
+look_back = 5
+
+def create_sequences(features, price_col, company, window_size):
+    sequences = []
+    for i in range(len(features) - window_size):
+        bert_sequence = np.array(features["BERT_Embeddings"].tolist())[i:i+window_size]
+        price_sequence = features[price_col].values[i:i+window_size].reshape(-1, 1)
+        company_sequence = np.array([price_col.split("_")[0]] * window_size)
+        entity_sequence = np.array(features["Entities"].tolist())[i:i+window_size]
+        sentiment_sequence = features["Sentiment"].values[i:i+window_size].reshape(-1, 1)
+        tfidf_sequence = np.array(features["TFIDF"].tolist())[i:i+window_size]
+        topics_sequence = np.array(features["Topics"].tolist())[i:i+window_size]
+        relevance_sequence = features[f"{company}_Relevant"].values[i:i+window_size].reshape(-1, 1)
+        sequence = {
+            "bert": bert_sequence,
+            "price": price_sequence,
+            "company": company_sequence,
+            "entities": entity_sequence,
+            "sentiment": sentiment_sequence,
+            "tfidf": tfidf_sequence,
+            "topics": topics_sequence,
+            "relevance": relevance_sequence
+        }
+        sequences.append(sequence)
+    return sequences
+
+# Create sequences for each company
+all_sequences = []
+for price_col, company in zip(price_cols, companies):
+    all_sequences += create_sequences(data.copy(), price_col, company, look_back)
+
+# Convert sequences to appropriate format
+def convert_sequences(sequences):
+    bert = np.array([seq["bert"] for seq in sequences])
+    price = np.array([seq["price"] for seq in sequences])
+    company = np.array([seq["company"] for seq in sequences])
+    entities = np.array([seq["entities"] for seq in sequences])
+    sentiment = np.array([seq["sentiment"] for seq in sequences])
+    tfidf = np.array([seq["tfidf"] for seq in sequences])
+    topics = np.array([seq["topics"] for seq in sequences])
+    relevance = np.array([seq["relevance"] for seq in sequences])
+    return bert, price, company, entities, sentiment, tfidf, topics, relevance
+
+bert, price, company, entities, sentiment, tfidf, topics, relevance = convert_sequences(all_sequences)
+
+# Adjust target data to include separate outputs for each company
+targets = {f'output_{company}': data[price_col].shift(-1).dropna().values for price_col, company in zip(price_cols, companies)}
+
+# Ensure the target data aligns with the sequences
+targets = {key: np.pad(value, (0, len(bert) - len(value)), 'constant', constant_values=np.nan) for key, value in targets.items()}
+
+# Build Transformer model
+def build_transformer_model():
+    bert_input = Input(shape=(look_back, bert.shape[2]), name='bert_input')
+    price_input = Input(shape=(look_back, 1), name='price_input')
+    company_input = Input(shape=(look_back,), name='company_input')
+    entities_input = Input(shape=(look_back, len(unique_entities)), name='entities_input')
+    sentiment_input = Input(shape=(look_back, 1), name='sentiment_input')
+    tfidf_input = Input(shape=(look_back, tfidf.shape[2]), name='tfidf_input')
+    topics_input = Input(shape=(look_back, n_topics), name='topics_input')
+    relevance_input = Input(shape=(look_back, 1), name='relevance_input')
+
+    # Company embedding
+    company_embedding_layer = Embedding(input_dim=len(price_cols) + 1, output_dim=10, name='company_embedding')
+    company_embedding = company_embedding_layer(company_input)
+
+    # Combine all inputs
+    combined = Concatenate(axis=-1)([bert_input, price_input, company_embedding, entities_input, sentiment_input, tfidf_input, topics_input, relevance_input])
+
+    # Transformer block
+    class TransformerBlock(tf.keras.layers.Layer):
+        def __init__(self, embed_dim, num_heads, ff_dim, rate=0.1):
+            super(TransformerBlock, self).__init__()
+            self.att = tf.keras.layers.MultiHeadAttention(num_heads=num_heads, key_dim=embed_dim)
+            self.ffn = tf.keras.Sequential([
+                tf.keras.layers.Dense(ff_dim, activation="relu"),
+                tf.keras.layers.Dense(embed_dim),
+            ])
+            self.layernorm1 = LayerNormalization(epsilon=1e-6)
+            self.layernorm2 = LayerNormalization(epsilon=1e-6)
+            self.dropout1 = tf.keras.layers.Dropout(rate)
+            self.dropout2 = tf.keras.layers.Dropout(rate)
+
+        def call(self, inputs, training):
+            attn_output = self.att(inputs, inputs)
+            attn_output = self.dropout1(attn_output, training=training)
+            out1 = self.layernorm1(inputs + attn_output)
+            ffn_output = self.ffn(out1)
+            ffn_output = self.dropout2(ffn_output, training=training)
+            return self.layernorm2(out1 + ffn_output)
+
+    embed_dim = 32  # Embedding size for each token
+    num_heads = 2  # Number of attention heads
+    ff_dim = 32  # Hidden layer size in feed forward network inside transformer
+
+    transformer_block = TransformerBlock(embed_dim, num_heads, ff_dim)
+    x = transformer_block(combined)
+
+    # Regularization
+    x = Dropout(0.2)(x)
+
+    # Create separate output layers for each company
+    outputs = {f'output_{company}': Dense(1, activation='linear', name=f'output_{company}')(x) for company in companies}
+
+    # Create model
+    model = Model(inputs=[bert_input, price_input, company_input, entities_input, sentiment_input, tfidf_input, topics_input, relevance_input], outputs=outputs)
+    return model
+
+# Prepare inputs for the model
+inputs = [bert, price, company, entities, sentiment, tfidf, topics, relevance]
+
+# Set up K-Fold cross-validation
+kf = KFold(n_splits=5, shuffle=True, random_state=42)
+
+# Function to compile and train the model within each fold
+def compile_and_train_model(train_idx, val_idx):
+    train_inputs = [input_data[train_idx] for input_data in inputs]
+    val_inputs = [input_data[val_idx] for input_data in inputs]
+    
+    train_targets_split = {key: value[train_idx] for key, value in targets.items()}
+    val_targets_split = {key: value[val_idx] for key, value in targets.items()}
+
+    # Build the Transformer model
+    model = build_transformer_model()
+    model.compile(loss={f'output_{company}': 'mse' for company in companies}, optimizer=Adam())
+    
+    # Early stopping callback
+    early_stopping = EarlyStopping(monitor='val_loss', patience=5, restore_best_weights=True)
+
+    # Train the model
+    model.fit(
+        train_inputs,
+        train_targets_split,
+        validation_data=(val_inputs, val_targets_split),
+        epochs=50,
+        batch_size=32,
+        callbacks=[early_stopping]
+    )
+
+    return model
+
+# Perform K-Fold cross-validation
+fold_models = []
+for train_idx, val_idx in kf.split(bert):
+    model = compile_and_train_model(train_idx, val_idx)
+    fold_models.append(model)
+
+# Function to make predictions using the average of models from cross-validation
+def predict_with_ensemble(models, inputs):
+    predictions = [model.predict(inputs) for model in models]
+    avg_predictions = {}
+    for company in companies:
+        avg_predictions[f'output_{company}'] = np.mean([pred[f'output_{company}'] for pred in predictions], axis=0)
+    return avg_predictions
+
+# Make predictions on test data with ensemble of models from cross-validation
+test_predictions = predict_with_ensemble(fold_models, inputs)
+
+# Convert predictions to a DataFrame for easier handling
+predicted_prices_df = pd.DataFrame({company: test_predictions[f'output_{company}'].flatten() for company in companies})
+
+# Display the predicted prices
+print(predicted_prices_df.head())
+
+# Function to create a new row with new data
+def create_new_row(date, news, company_name, price, sentiment, entities, tfidf, topics, relevance, fundamentals):
+    new_row = {
+        "Date": date,
+        "News_Article": preprocess_text(news),
+        "Company_Name": company_name,
+        "Sentiment": sentiment,
+        "Entities": entities,
+        "TFIDF": list(tfidf.flatten()),
+        "Topics": list(topics.flatten()),
+        "Relevance": relevance,
+        "PE_Ratio": fundamentals["PE_Ratio"],
+        "EPS": fundamentals["EPS"],
+        "Revenue": fundamentals["Revenue"],
+        "Market_Cap": fundamentals["Market_Cap"]
+    }
+    for col in price_cols:
+        if col.startswith(company_name):
+            new_row[col] = price
+        else:
+            new_row[col] = np.nan  # or you can set it to the latest available price for the other companies
+    return new_row
+
+# Example of using the model for future predictions and storing new news
+new_news = "Your new news article"
+new_company_name = "Apple"
+new_date = "2022-01-11"
+new_ticker = "AAPL"
+new_price = 150  # Example price
+
+new_sentiment = get_sentiment(new_news)
+new_entities = extract_entities(new_news)
+new_tfidf = vectorizer_tfidf.transform([new_news]).toarray()
+new_topics = lda.transform(new_tfidf)
+new_relevance = is_relevant(new_entities, new_company_name)
+new_fundamentals = fetch_fundamental_data(new_ticker)  # Fetch latest fundamental data
+
+# Get BERT embedding for the new news article
+new_bert_embedding = get_bert_embeddings([new_news])
+
+# Create binary entity feature vector for new data
+new_entity_features = create_entity_features(new_entities, entity_to_index)
+
+# Create sequence data for prediction
+new_sequence = {
+    "bert": np.array([new_bert_embedding] * look_back),
+    "price": np.array([[new_price]] * look_back),
+    "company": np.array([label_encoder.transform([new_company_name])[0]] * look_back),
+    "entities": np.array([new_entity_features] * look_back),
+    "sentiment": np.array([[new_sentiment]] * look_back),
+    "tfidf": np.array([new_tfidf] * look_back).reshape(look_back, -1),
+    "topics": np.array([new_topics] * look_back).reshape(look_back, -1),
+    "relevance": np.array([[new_relevance]] * look_back)
+}
+
+# Prepare input data for prediction
+new_input = [
+    np.array([new_sequence["bert"]]),
+    np.array([new_sequence["price"]]),
+    np.array([new_sequence["company"]]),
+    np.array([new_sequence["entities"]]),
+    np.array([new_sequence["sentiment"]]),
+    np.array([new_sequence["tfidf"]]),
+    np.array([new_sequence["topics"]]),
+    np.array([new_sequence["relevance"]])
+]
+
+# Make prediction with ensemble of models from cross-validation
+new_prediction = predict_with_ensemble(fold_models, new_input)
+predicted_price = new_prediction[f'output_{new_company_name}'].flatten()[0]
+
+print(f"Predicted future price for {new_company_name}: {predicted_price}")
+
+# Create new row with the new data
+new_row = create_new_row(new_date, new_news, new_company_name, new_price, new_sentiment, new_entities, new_tfidf, new_topics, new_relevance, new_fundamentals)
+
+# Append the new row to the dataset
+data = data.append(new_row, ignore_index=True)
+
+# Save the updated dataset to a file
+data.to_csv("updated_dataset.csv", index=False)
+
+# Load the updated dataset for future predictions
+data = pd.read_csv("updated_dataset.csv")
+
+# Continue with data preprocessing and model training as before
+
+# Example function to retrain the models with updated data
+def retrain_models(data):
+    # Preprocess the updated data as before
+    data[news_col] = data[news_col].apply(preprocess_text)
+    data["Entities"] = data[news_col].apply(extract_entities)
+    data["Entity_Features"] = data["Entities"].apply(lambda x: create_entity_features(x, entity_to_index))
+    data["Sentiment"] = data[news_col].apply(get_sentiment)
+    tfidf_matrix = vectorizer_tfidf.transform(data[news_col]).toarray()
+    topics_matrix = lda.transform(tfidf_matrix)
+    bert_embeddings = get_bert_embeddings(data[news_col].tolist())
+    data["TFIDF"] = list(tfidf_matrix)
+    data["Topics"] = list(topics_matrix)
+    data["BERT_Embeddings"] = list(bert_embeddings)
+
+    for company in companies:
+        data[f"{company}_Relevant"] = data["Entities"].apply(lambda x: is_relevant(x, company))
+
+    # Split data into training, validation, and testing sets
+    train_size = int(len(data) * 0.7)
+    val_size = int(len(data) * 0.2)
+    train_data, temp_data = train_test_split(data, train_size=train_size, shuffle=False)
+    val_data, test_data = train_test_split(temp_data, test_size=(len(data) - train_size -
+Sure, let's continue with the steps to split the data, create sequences, and retrain the models with the updated data.
+
+### Continued Code
+
+```python
+    val_data, test_data = train_test_split(temp_data, test_size=(len(data) - train_size - val_size), shuffle=False)
+
+    # Create sequences for each company
+    train_sequences = []
+    val_sequences = []
+    test_sequences = []
+    for price_col, company in zip(price_cols, companies):
+        train_sequences += create_sequences(train_data.copy(), price_col, company, look_back)
+        val_sequences += create_sequences(val_data.copy(), price_col, company, look_back)
+        test_sequences += create_sequences(test_data.copy(), price_col, company, look_back)
+
+    # Convert sequences to appropriate format
+    train_bert, train_price, train_company, train_entities, train_sentiment, train_tfidf, train_topics, train_relevance = convert_sequences(train_sequences)
+    val_bert, val_price, val_company, val_entities, val_sentiment, val_tfidf, val_topics, val_relevance = convert_sequences(val_sequences)
+    test_bert, test_price, test_company, test_entities, test_sentiment, test_tfidf, test_topics, test_relevance = convert_sequences(test_sequences)
+
+    # Adjust target data to include separate outputs for each company
+    train_targets = {f'output_{company}': train_data[price_col].shift(-1).dropna().values for price_col, company in zip(price_cols, companies)}
+    val_targets = {f'output_{company}': val_data[price_col].shift(-1).dropna().values for price_col, company in zip(price_cols, companies)}
+    test_targets = {f'output_{company}': test_data[price_col].shift(-1).dropna().values for price_col, company in zip(price_cols, companies)}
+
+    # Ensure the target data aligns with the sequences
+    train_targets = {key: np.pad(value, (0, len(train_bert) - len(value)), 'constant', constant_values=np.nan) for key, value in train_targets.items()}
+    val_targets = {key: np.pad(value, (0, len(val_bert) - len(value)), 'constant', constant_values=np.nan) for key, value in val_targets.items()}
+    test_targets = {key: np.pad(value, (0, len(test_bert) - len(value)), 'constant', constant_values=np.nan) for key, value in test_targets.items()}
+
+    # Build and compile the Transformer model
+    model = build_transformer_model()
+    model.compile(loss={f'output_{company}': 'mse' for company in companies}, optimizer=Adam())
+
+    # Early stopping callback
+    early_stopping = EarlyStopping(monitor='val_loss', patience=5, restore_best_weights=True)
+
+    # Train the model
+    model.fit(
+        [train_bert, train_price, train_company, train_entities, train_sentiment, train_tfidf, train_topics, train_relevance],
+        train_targets,
+        validation_data=([val_bert, val_price, val_company, val_entities, val_sentiment, val_tfidf, val_topics, val_relevance], val_targets),
+        epochs=50,
+        batch_size=32,
+        callbacks=[early_stopping]
+    )
+
+    return model
+
+# Retrain the models with the updated dataset
+new_model = retrain_models(data)
+
+# Function to predict using the retrained model
+def predict_new_data(model, new_input):
+    new_prediction = model.predict(new_input)
+    predicted_price = {company: new_prediction[f'output_{company}'].flatten()[0] for company in companies}
+    return predicted_price
+
+# Make prediction with the retrained model
+new_prediction = predict_new_data(new_model, new_input)
+print(f"Predicted future prices: {new_prediction}")
+
+
+

@@ -53,12 +53,14 @@ test_news_sequences = vectorizer(test_news.tolist())
 train_features = {
     "news": train_news_sequences,
     "price": train_data[price_col].values.reshape(-1, 1),  # Reshape for 2D array
+    "sentiment": train_sentiment.values.reshape(-1, 1)
     #"keywords": keyword_features, #noch nicht definiert
     #"topics": lda_topics #noch nicht definiert
 }
 test_features = {
     "news": test_news_sequences,
     "price": test_data[price_col].values.reshape(-1, 1),
+    "sentiment": test_sentiment.values.reshape(-1, 1)
     #"keywords": keyword_features, #noch nicht definiert
     #"topics": lda_topics #noch nicht definiert
 }
@@ -216,3 +218,16 @@ new_sequence = np.array(new_sequence)
 predicted_price = model.predict(new_sequence)[0][0]  # Access the first element from the prediction
 
 print(f"Predicted future price: {predicted_price}")
+
+
+# Sentiment Analysis 
+  from textblob import TextBlob
+
+def get_binary_sentiment(text):
+    polarity = TextBlob(text).sentiment.polarity
+    return 1 if polarity >= 0 else 0
+
+train_sentiment = train_data[news_col].apply(get_binary_sentiment)
+test_sentiment = test_data[news_col].apply(get_binary_sentiment)
+
+

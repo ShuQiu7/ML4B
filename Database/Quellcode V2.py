@@ -63,8 +63,8 @@ def get_binary_sentiment(text):
     polarity = TextBlob(text).sentiment.polarity
     return 1 if polarity >= 0 else 0
 
-train_sentiment = train_news.apply(get_binary_sentiment)
-test_sentiment = test_news.apply(get_binary_sentiment)
+train_sentiment = train_news.apply(get_binary_sentiment).astype(float)
+test_sentiment = test_news.apply(get_binary_sentiment).astype(float)
 
 # Create sequences with a look-back window
 def create_sequences(news, price, sentiment, window_size):
@@ -80,11 +80,16 @@ def create_sequences(news, price, sentiment, window_size):
 train_sequences, train_labels = create_sequences(train_news_sequences, train_data[price_col].values, train_sentiment.values, look_back)
 test_sequences, test_labels = create_sequences(test_news_sequences, test_data[price_col].values, test_sentiment.values, look_back)
 
+input_dim = max(train_sequences.max(), test_sequences.max()) + 1  # Ensure the input dimension covers the range of indices
 # Build the model
 model = tf.keras.Sequential([
-    tf.keras.layers.Embedding(input_dim=max_vocab_size, output_dim=150, input_length=look_back),
+    tf.keras.layers.Embedding(input_dim=max_vocab_size, output_dim=150, input_length=look_back * 2),
+    tf.keras.layers.Flatten(),
     tf.keras.layers.Dense(1)
 ])
+
+#assert train_sequences.dtype == 'int32' or train_sequences.dtype == 'float32', "Train sequences must be int32 or float32"
+#assert train_labels.dtype == 'float64' or train_labels.dtype == 'float32', "Train labels must be float32 or float64"
 
 # Compile model
 model.compile(loss="mse", optimizer="adam", run_eagerly = True)

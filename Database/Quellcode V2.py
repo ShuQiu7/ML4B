@@ -7,6 +7,7 @@ import string
 import nltk
 from nltk.corpus import stopwords
 nltk.download('stopwords')
+from textblob import TextBlob
 
 # Load historical data (replace with your data loading logic)
 
@@ -43,63 +44,55 @@ test_news = test_data[news_col].apply(preprocess_text)
 
 # Text Vectorization (if using news articles)
 max_vocab_size = 10000  # Adjust based on your data
-vectorizer = tf.keras.layers.TextVectorization(max_tokens=max_vocab_size)
+vectorizer = tf.keras.layers.TextVectorization(max_tokens=max_vocab_size, output_mode = 'int')
 vectorizer.adapt(train_news.tolist() + test_news.tolist())
 
 train_news_sequences = vectorizer(train_news.tolist())
 test_news_sequences = vectorizer(test_news.tolist())
 
-# Combining features (consider appropriate concatenation based on your data)
-train_features = {
-    "news": train_news_sequences,
-    "price": train_data[price_col].values.reshape(-1, 1),  # Reshape for 2D array
-    "sentiment": train_sentiment.values.reshape(-1, 1)
-    #"keywords": keyword_features, #noch nicht definiert
-    #"topics": lda_topics #noch nicht definiert
-}
-test_features = {
-    "news": test_news_sequences,
-    "price": test_data[price_col].values.reshape(-1, 1),
-    "sentiment": test_sentiment.values.reshape(-1, 1)
-    #"keywords": keyword_features, #noch nicht definiert
-    #"topics": lda_topics #noch nicht definiert
-}
+# Ensure the news sequences are correctly shaped as integer indices
+train_news_sequences = np.array(train_news_sequences)
+test_news_sequences = np.array(test_news_sequences)
 
 # Define look-back window
 look_back = 5  # Number of past days (including news) to consider for prediction
 
-def create_sequences(features, window_size):
-  sequences = []
-  for i in range(len(features["price"]) - window_size):
-    news_sequence = features["news"][i:i+window_size]
-    price_sequence = features["price"][i:i+window_size]
-    #keyword_sequence = features["keywords"][i:i+window_size]
-    #topic_sequence = features["topics"][i:i+window_size].reshape(-1, 1)  # Reshape for concatenation
-    sequence = np.concatenate((news_sequence, price_sequence), axis=1)  # Concatenate all sequences, keyword and topic sequence to be added
-    sequences.append(sequence)
-  return sequences
+# Sentiment Analysis 
+def get_binary_sentiment(text):
+    polarity = TextBlob(text).sentiment.polarity
+    return 1 if polarity >= 0 else 0
 
-train_sequences = create_sequences(train_features.copy(), look_back)
-test_sequences = create_sequences(test_features.copy(), look_back)
+train_sentiment = train_news.apply(get_binary_sentiment)
+test_sentiment = test_news.apply(get_binary_sentiment)
 
-# Convert sequences to numpy arrays
-train_sequences = np.array(train_sequences)
-test_sequences = np.array(test_sequences)
+# Create sequences with a look-back window
+def create_sequences(news, price, sentiment, window_size):
+    sequences, labels = [], []
+    for i in range(len(price) - window_size):
+        news_seq = news[i:i + window_size]
+        sentiment_seq = sentiment[i:i + window_size]
+        combined_seq = np.hstack([news_seq, np.array(sentiment_seq).reshape(-1, 1)])        
+        sequences.append(combined_seq)
+        labels.append(price[i + window_size])  # The target price is the next price after the window
+    return np.array(sequences), np.array(labels)
 
-# Build Transformer model
-model = tf.keras.Sequential()
-model.add(tf.keras.layers.Embedding(max_vocab_size, output_dim = 150, input_shape=(look_back, None)))  # Embedding for news
-#FUNKTIONIERT NOCH NICHT# model.add(tf.keras.layers.MultiHeadAttention(num_heads=8, key_dim=64))  # Adjust hyperparameters as needed; funktioniert noch nicht.
-model.add(tf.keras.layers.Dense(units=1))  # Output layer for predicted price
+train_sequences, train_labels = create_sequences(train_news_sequences, train_data[price_col].values, train_sentiment.values, look_back)
+test_sequences, test_labels = create_sequences(test_news_sequences, test_data[price_col].values, test_sentiment.values, look_back)
+
+# Build the model
+model = tf.keras.Sequential([
+    tf.keras.layers.Embedding(input_dim=max_vocab_size, output_dim=150, input_length=look_back),
+    tf.keras.layers.Dense(1)
+])
 
 # Compile model
-model.compile(loss="mse", optimizer="adam")
+model.compile(loss="mse", optimizer="adam", run_eagerly = True)
 
 # Train the model
-#FUNKTIONIERT NICH NICHT# model.fit(train_sequences, train_data[price_col][look_back:], epochs=10, batch_size=32)
+model.fit(train_sequences, train_labels, epochs=10, batch_size=32)
 
 # Make predictions on test data
-#predicted_prices = model.predict(test_sequences)
+predicted_prices = model.predict(test_sequences)
 
 #####################Neue Nachrichten einbauen
 
@@ -133,12 +126,6 @@ def fetch_financial_news(api_endpoint, parameters):
     
     return df
 
-# Fetch financial news
-news_df = fetch_financial_news(endpoint, params)
-
-# Display the DataFrame
-print(news_df)
-
 ###bzw. bei existierendem DataFrame (wie in unserem Fall)
 existing_df = pd.DataFrame(columns=['Headline', 'Date'])  # Or load from an existing file
 
@@ -150,9 +137,6 @@ updated_df = pd.concat([existing_df, new_news_df], ignore_index=True)
 
 # Optionally, save the updated DataFrame to a CSV file
 updated_df.to_csv('financial_news.csv', index=False)
-
-
-
 
 # Function to fetch stock data and return a DataFrame
 def fetch_stock_data(ticker, start_date, end_date):
@@ -172,12 +156,6 @@ ticker_symbol = 'AAPL'  # Example ticker symbol for Apple Inc.
 start_date = '2022-01-01'
 end_date = '2022-12-31'
 
-# Fetch stock data
-stock_data_df = fetch_stock_data(ticker_symbol, start_date, end_date)
-
-# Display the DataFrame
-print(stock_data_df)
-
 #bzw. bei existierendem DataFrame
 existing_stock_df = pd.DataFrame(columns=['Date', 'Open', 'High', 'Low', 'Close', 'Volume'])  # Or load from an existing file
 
@@ -185,20 +163,15 @@ existing_stock_df = pd.DataFrame(columns=['Date', 'Open', 'High', 'Low', 'Close'
 new_stock_data_df = fetch_stock_data(ticker_symbol, start_date, end_date)
 
 # Append new rows to the existing DataFrame
-updated_stock_df = pd.concat([existing_stock_df, new_stock_data_df], ignore_index=True
+updated_stock_df = pd.concat([existing_stock_df, new_stock_data_df], ignore_index=True)
 
 # Optionally, save the updated DataFrame to a CSV file
 updated_stock_df.to_csv('stock_prices.csv', index=False)
 
-                             
-
-(# Use the model for future predictions (replace with your new data)
+# Use the model for future predictions (replace with your new data)
 new_news = preprocess_text("Your new news article")  # Preprocess new news article
 new_news_sequence = vectorizer(np.array([new_news]))
-new_price_data = [data[price_)
-
-# Reshape the new news sequence for consistency
-new_news_sequence = np.reshape(new_news_sequence, (1, look_back, -1))  # Reshape for compatibility
+new_price_data = data[price_col]
 
 # Include logic for new price data (replace with your actual approach)
 # Assuming you want to use the most recent closing price
@@ -210,24 +183,14 @@ new_data = {
     "price": new_price_data
 }
 
+new_sentiment = get_binary_sentiment(new_news)
+
 # Create a sequence from the new data
-new_sequence = create_sequences(new_data.copy(), look_back)
+new_sequence = create_sequences(new_news_sequence, new_price_data, new_sentiment, look_back)
 new_sequence = np.array(new_sequence)
 
 # Predict the future price using the trained model
-predicted_price = model.predict(new_sequence)[0][0]  # Access the first element from the prediction
+predicted_price = model.predict(new_sequence)  # Access the first element from the prediction
 
 print(f"Predicted future price: {predicted_price}")
-
-
-# Sentiment Analysis 
-  from textblob import TextBlob
-
-def get_binary_sentiment(text):
-    polarity = TextBlob(text).sentiment.polarity
-    return 1 if polarity >= 0 else 0
-
-train_sentiment = train_data[news_col].apply(get_binary_sentiment)
-test_sentiment = test_data[news_col].apply(get_binary_sentiment)
-
 

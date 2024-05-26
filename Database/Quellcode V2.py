@@ -11,13 +11,14 @@ from textblob import TextBlob
 
 # Load historical data (replace with your data loading logic)
 
-data = pd.read_csv("C:/Users/Felix/OneDrive/10_FAU/Semester 6/Machine Learning for Business/GOOGLE.csv", encoding="utf-8", delimiter=";")
+data = pd.read_csv("C:/Users/Felix/OneDrive/10_FAU/Semester 6/Machine Learning for Business/GOOGLE test.csv", encoding="utf-8", delimiter=";")
 date_col = "Date"  # Column containing the date
 price_col = "Close"  # Column containing the closing price
 news_col = "News_Article"  # Column containing the news text (optional)
 
+print("Daten  ", data)
 # Prepare data
-data.iloc[:, 4] = data.iloc[:, 2].shift(-1)  # Shift price for prediction
+data['shifted_price'] = data['Close'].shift(-1)  # Create new column with shifted price
 data.dropna(inplace=True)  # Remove rows with missing values
 
 # Split data into training and testing sets
@@ -43,7 +44,7 @@ train_news = train_data[news_col].apply(preprocess_text)
 test_news = test_data[news_col].apply(preprocess_text)
 
 # Text Vectorization (if using news articles)
-max_vocab_size = 10000  # Adjust based on your data
+max_vocab_size = 100000  # Adjust based on your data
 vectorizer = tf.keras.layers.TextVectorization(max_tokens=max_vocab_size, output_mode = 'int')
 vectorizer.adapt(train_news.tolist() + test_news.tolist())
 
@@ -93,6 +94,7 @@ model.fit(train_sequences, train_labels, epochs=10, batch_size=32)
 
 # Make predictions on test data
 predicted_prices = model.predict(test_sequences)
+print(predicted_prices)
 
 #####################Neue Nachrichten einbauen
 
@@ -193,4 +195,3 @@ new_sequence = np.array(new_sequence)
 predicted_price = model.predict(new_sequence)  # Access the first element from the prediction
 
 print(f"Predicted future price: {predicted_price}")
-

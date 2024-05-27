@@ -11,7 +11,7 @@ from textblob import TextBlob
 
 # Load historical data (replace with your data loading logic)
 
-data = pd.read_csv("C:/Users/Felix/OneDrive/10_FAU/Semester 6/Machine Learning for Business/GOOGLE test.csv", encoding="utf-8", delimiter=";")
+data = pd.read_csv("C:/Users/Felix/OneDrive/10_FAU/Semester 6/Machine Learning for Business/googletest.csv", encoding="utf-8", delimiter=";")
 date_col = "Date"  # Column containing the date
 price_col = "Close"  # Column containing the closing price
 news_col = "News_Article"  # Column containing the news text (optional)
@@ -75,15 +75,15 @@ def create_sequences(news, price, sentiment, window_size):
         combined_seq = np.hstack([news_seq, np.array(sentiment_seq).reshape(-1, 1)])        
         sequences.append(combined_seq)
         labels.append(price[i + window_size])  # The target price is the next price after the window
-    return np.array(sequences), np.array(labels)
+    return np.array(sequences, dtype=np.float32), np.array(labels, dtype=np.float32)
 
 train_sequences, train_labels = create_sequences(train_news_sequences, train_data[price_col].values, train_sentiment.values, look_back)
 test_sequences, test_labels = create_sequences(test_news_sequences, test_data[price_col].values, test_sentiment.values, look_back)
 
-input_dim = max(train_sequences.max(), test_sequences.max()) + 1  # Ensure the input dimension covers the range of indices
-# Build the model
+input_dim = train_sequences.shape[-1]  # The number of features in each sequence# Build the model
+
 model = tf.keras.Sequential([
-    tf.keras.layers.Embedding(input_dim=max_vocab_size, output_dim=150, input_length=look_back * 2),
+    tf.keras.layers.Input(shape=(look_back, input_dim)),
     tf.keras.layers.Flatten(),
     tf.keras.layers.Dense(1)
 ])
@@ -98,8 +98,8 @@ model.compile(loss="mse", optimizer="adam", run_eagerly = True)
 model.fit(train_sequences, train_labels, epochs=10, batch_size=32)
 
 # Make predictions on test data
-predicted_prices = model.predict(test_sequences)
-print(predicted_prices)
+predicted_price = model.predict(test_sequences)
+print(predicted_price)
 
 #####################Neue Nachrichten einbauen
 

@@ -14,6 +14,8 @@ ent_date = st.sidebar.date_input('End date', date(2016, 12, 31))
 lables = ("1", "0")
 selected_lables = st.selectbox("please select a lable for prediction", lables)
 
+news_headline = st.text_input("Enter News Headline")
+
 data_load_state = st.text("Load data...")
 
 # Data Visualization

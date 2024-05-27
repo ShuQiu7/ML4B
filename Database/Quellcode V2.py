@@ -45,7 +45,7 @@ test_news = test_data[news_col].apply(preprocess_text)
 
 # Text Vectorization (if using news articles)
 max_vocab_size = 100000  # Adjust based on your data
-vectorizer = tf.keras.layers.TextVectorization(max_tokens=max_vocab_size, output_mode = 'int')
+vectorizer = tf.keras.layers.TextVectorization(max_tokens=max_vocab_size, output_sequence_length=391, output_mode = 'int')  # Set output_sequence_length
 vectorizer.adapt(train_news.tolist() + test_news.tolist())
 
 train_news_sequences = vectorizer(train_news.tolist())
@@ -99,7 +99,7 @@ model.fit(train_sequences, train_labels, epochs=10, batch_size=32)
 
 # Make predictions on test data
 predicted_price = model.predict(test_sequences)
-print(predicted_price)
+print(predicted_price[0])
 
 #####################Neue Nachrichten einbauen
 
@@ -197,6 +197,6 @@ new_sequence = create_sequences(new_news_sequence, new_price_data, new_sentiment
 new_sequence = np.array(new_sequence)
 
 # Predict the future price using the trained model
-predicted_price = model.predict(new_sequence)  # Access the first element from the prediction
+# NOCH KEINE NEUTEN DATEN EINGEPFLEGT #predicted_price = model.predict(new_sequence)  # Access the first element from the prediction
 
-print(f"Predicted future price: {predicted_price}")
+#print(f"Predicted future price: {predicted_price}")

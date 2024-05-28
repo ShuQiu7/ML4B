@@ -1,7 +1,19 @@
+import pandas as pd
+import numpy as np
+import tensorflow as tf
+import yfinance as yf
+import requests
+import string
+import nltk
+from nltk.corpus import stopwords
+nltk.download('stopwords')
+from textblob import TextBlob
+
 import streamlit as st
 import datetime
 from datetime import date
 from  Zwischenabgabe import Code
+
 
 st.title("Stock Prediction App")
 st.subheader('This app is created to forecast the stock market movement using daily news headlines')

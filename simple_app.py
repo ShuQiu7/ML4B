@@ -1,14 +1,3 @@
-import pandas as pd
-import numpy as np
-import tensorflow as tf
-import yfinance as yf
-import requests
-import string
-import nltk
-from nltk.corpus import stopwords
-nltk.download('stopwords')
-from textblob import TextBlob
-
 import streamlit as st
 import datetime
 from datetime import date
@@ -35,4 +24,5 @@ if submitted:
     st.write(st.session_state.result)
 
 data_load_state = st.text("Load data...")
+
 
